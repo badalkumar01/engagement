@@ -11,6 +11,8 @@ services:
     startCommand: node src/server.js
     healthCheckPath: /api/health
     envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"   # better-sqlite3 has a prebuilt binary for Node 20 (Node 26 does not)
       - key: LLM_PROVIDER
         value: gemini
       - key: GEMINI_MODEL

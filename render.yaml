@@ -1,0 +1,29 @@
+# Render deploy config for the backend.
+# In Render: New + -> Blueprint -> point it at this repo. Render reads this file.
+# You only need to paste your GEMINI_API_KEY (marked sync:false) in the dashboard.
+services:
+  - type: web
+    name: engagement-assistant-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_MAX_TOKENS
+        value: "400"
+      - key: LLM_TIMEOUT_MS
+        value: "30000"
+      - key: GEMINI_API_KEY
+        sync: false          # paste this in the Render dashboard (kept secret)
+      - key: JWT_SECRET
+        generateValue: true  # Render generates a strong random secret
+      - key: JWT_EXPIRES_IN
+        value: 30d
+      - key: ALLOWED_ORIGINS
+        value: "*"           # tighten later; the extension origin is chrome-extension://<id>

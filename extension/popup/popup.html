@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Engagement Assistant</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        width: 320px; margin: 0; padding: 14px;
+        font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
+        background: #fff; color: #1d2226;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #1b1f23; color: #e9e9e9; }
+        .card { background: #262b30 !important; }
+      }
+      h1 { font-size: 15px; margin: 0 0 10px; }
+      .status { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 10px; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: #9ca3af; }
+      .dot.ok { background: #16a34a; } .dot.bad { background: #b91c1c; }
+      .card { background: #f3f6f8; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+      .warn { background: #b91c1c; color: #fff; }
+      .row { display: flex; justify-content: space-between; margin: 2px 0; }
+      .muted { color: #6b7280; }
+      .total { font-size: 22px; font-weight: 700; }
+      ul { margin: 6px 0 0; padding-left: 16px; max-height: 120px; overflow: auto; }
+      li { margin: 3px 0; }
+      a { color: #0a66c2; }
+      button {
+        width: 100%; padding: 8px; border: none; border-radius: 6px;
+        background: #0a66c2; color: #fff; font-weight: 600; cursor: pointer; margin-top: 6px;
+      }
+      button.secondary { background: transparent; color: #0a66c2; border: 1px solid #0a66c2; }
+      .pills span { display:inline-block; background:#e1e9f0; color:#0a66c2; border-radius:10px; padding:1px 8px; margin:2px 2px 0 0; font-size:11px; }
+    </style>
+  </head>
+  <body>
+    <h1>LinkedIn Engagement Assistant</h1>
+    <div class="status"><span id="dot" class="dot"></span><span id="statusText">Checking...</span></div>
+
+    <div id="warnCard" class="card warn" hidden>
+      <div id="warnMsg"></div>
+      <button id="clearWarn" class="secondary" style="color:#fff;border-color:#fff;margin-top:8px;">Dismiss</button>
+    </div>
+
+    <div class="card">
+      <div class="muted">Posted today</div>
+      <div class="total" id="total">0</div>
+      <div class="pills" id="byPlatform"></div>
+      <div id="bySurface"></div>
+      <div class="pills" id="byCategory"></div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Posts you commented on</div>
+      <ul id="postList"><li class="muted">Nothing yet today.</li></ul>
+    </div>
+
+    <button id="openOptions">Settings &amp; onboarding</button>
+    <p class="muted" style="margin:10px 0 0;font-size:11px;">
+      Drafts are placed in the comment box for you to review. You always click Post yourself.
+    </p>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

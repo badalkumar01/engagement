@@ -21,8 +21,8 @@ export function issueToken(user) {
 
 // Validates a license key, creates/links a user, returns { token, user }.
 export function checkLicense({ key, email = null, linkedinUrl = null }) {
-  if (!key || typeof key !== 'string' || key.trim().length < 6) {
-    throw Object.assign(new Error('A valid license key is required'), { status: 400 });
+  if (!key || typeof key !== 'string' || key.trim().length < 4) {
+    throw Object.assign(new Error('License key must be at least 4 characters'), { status: 400 });
   }
   const trimmed = key.trim();
   let lic = db.prepare('SELECT * FROM licenses WHERE key = ?').get(trimmed);
@@ -52,6 +52,11 @@ export function requireAuth(req, res, next) {
   if (!m) return res.status(401).json({ error: 'Missing bearer token' });
   try {
     const payload = jwt.verify(m[1], secret());
+    // The token may reference a user that no longer exists (e.g. the DB was
+    // reset). Return 401 so the client can transparently re-authenticate,
+    // instead of letting a later insert fail with a foreign-key error.
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(payload.uid);
+    if (!user) return res.status(401).json({ error: 'Session expired, please reconnect' });
     req.userId = payload.uid;
     next();
   } catch {

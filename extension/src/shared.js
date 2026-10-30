@@ -2,7 +2,9 @@
 // The backend base URL and the auth token live in chrome.storage.local.
 
 export const DEFAULTS = {
-  apiBase: 'http://localhost:8787',
+  // Hosted backend. Clients connect here by default; change it only to run a
+  // local backend (http://localhost:8787).
+  apiBase: 'https://engagement-assistant-backend.onrender.com',
 };
 
 export async function getStore(keys) {
@@ -29,7 +31,28 @@ export async function getConfig() {
 
 // Thin fetch wrapper with auth + uniform error handling. Never throws a raw
 // network error at the caller; returns { ok, data, error, status }.
-export async function api(path, { method = 'GET', body, auth = true } = {}) {
+// Re-run license-check with the stored key to get a fresh token. Used to
+// transparently recover when a token expires or the backend DB was reset.
+async function refreshToken(base, prefix) {
+  const { license } = await getConfig();
+  if (!license) return false;
+  const { email } = await getStore(['email']);
+  try {
+    const res = await fetch(`${base}${prefix}/license-check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: license, email: email || null }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    await setStore({ token: data.token, profile: data.user });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function api(path, { method = 'GET', body, auth = true, _retried = false } = {}) {
   const { apiBase, token } = await getConfig();
   const headers = { 'content-type': 'application/json' };
   if (auth && token) headers.authorization = `Bearer ${token}`;
@@ -52,6 +75,10 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
       /* non-json response */
     }
     if (!res.ok) {
+      // A stale/expired token: refresh once with the stored license and retry.
+      if (res.status === 401 && auth && !_retried && (await refreshToken(base, prefix))) {
+        return api(path, { method, body, auth, _retried: true });
+      }
       return { ok: false, status: res.status, error: data?.error || `HTTP ${res.status}`, data };
     }
     return { ok: true, status: res.status, data };

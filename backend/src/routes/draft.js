@@ -25,14 +25,17 @@ function pickCategory(requested) {
 // near-duplicates of the user's recent comments by regenerating.
 router.post('/draft-comment', requireAuth, async (req, res, next) => {
   try {
-    const { postText, postAuthor, postUrl, surface, category, platform } = req.body || {};
-    if (!postText || typeof postText !== 'string' || postText.trim().length < 10) {
-      return res.status(400).json({ error: 'postText is required (the content of the post to react to)' });
+    const { postText, postAuthor, postUrl, surface, category, platform, postType } = req.body || {};
+    const images = Array.isArray(req.body?.images) ? req.body.images.filter((u) => typeof u === 'string').slice(0, 8) : [];
+    const hasText = typeof postText === 'string' && postText.trim().length >= 10;
+    if (!hasText && !images.length) {
+      return res.status(400).json({ error: 'Nothing to react to: the post has no readable caption or image.' });
     }
 
     const settings = getSettings(req.userId);
     const chosen = pickCategory(category);
     const plat = ['linkedin', 'instagram'].includes(platform) ? platform : 'linkedin';
+    const ptype = ['static', 'carousel', 'video', 'text'].includes(postType) ? postType : undefined;
 
     // Pull recent comments to avoid repeating ourselves.
     const prior = db
@@ -50,6 +53,8 @@ router.post('/draft-comment', requireAuth, async (req, res, next) => {
         postText,
         postAuthor,
         platform: plat,
+        postType: ptype,
+        images,
         avoid: prior,
       });
       dupe = findNearDuplicate(candidate, prior, 0.7);

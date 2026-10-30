@@ -80,12 +80,29 @@
   }
 
   // --- Reading / filling ---------------------------------------------------
+  // Generic fallback: the post's real caption is almost always the longest
+  // user-text block (LinkedIn/Instagram wrap it in dir="ltr"/"auto"), which is
+  // robust to class-name changes.
+  function bestTextBlock(postEl) {
+    let best = '';
+    let nodes = [];
+    try { nodes = postEl.querySelectorAll('span[dir="ltr"], span[dir="auto"], div[dir="ltr"], div[dir="auto"], p'); } catch { /* ignore */ }
+    nodes.forEach((el) => {
+      // skip nodes that merely contain other candidate blocks (avoid duplication)
+      if (el.querySelector('span[dir], p')) return;
+      const t = textOf(el);
+      if (t.length > best.length) best = t;
+    });
+    return best;
+  }
+
   function readPost(postEl) {
     const author = textOf(pick(postEl, SEL.author)) || 'unknown';
-    const text = textOf(pick(postEl, SEL.text));
+    let text = textOf(pick(postEl, SEL.text));
+    if (!text || text.length < 10) text = bestTextBlock(postEl);
     let url = location.href;
     try { url = adapter.postUrl(postEl) || url; } catch { /* ignore */ }
-    return { author, text, url };
+    return { author, text: text || '', url };
   }
 
   function openCommentBox(postEl) {
@@ -204,7 +221,11 @@
       try {
         const resp = await chrome.runtime.sendMessage({
           type: 'DRAFT',
-          payload: { postText: post.text, postAuthor: post.author, postUrl: post.url, surface: adapter.detectSurface(), platform: adapter.platform },
+          payload: {
+            postText: post.text, postAuthor: post.author, postUrl: post.url,
+            surface: adapter.detectSurface(), platform: adapter.platform,
+            postType: data.media?.type, images: data.media?.images || [],
+          },
         });
         if (resp?.ok) { ta.value = resp.data.comment; logId = resp.data.logId; status.textContent = 'New draft ready.'; }
         else status.textContent = resp?.error || 'Could not regenerate.';
@@ -274,6 +295,20 @@
     };
   }
 
+  // Step through a carousel (bounded) collecting each slide's image URL, so the
+  // draft reflects the whole carousel, not just the first slide.
+  async function collectCarousel(postEl, initial) {
+    const urls = new Set(initial || []);
+    for (let i = 0; i < 6 && urls.size < 8; i++) {
+      const next = postEl.querySelector('button[aria-label="Next"], [aria-label="Next"][role="button"]');
+      if (!next) break;
+      try { next.click(); } catch { break; }
+      await new Promise((r) => setTimeout(r, 450));
+      try { (adapter.media(postEl).images || []).forEach((u) => urls.add(u)); } catch { /* ignore */ }
+    }
+    return [...urls].slice(0, 8);
+  }
+
   async function handleDraft(postEl, btn) {
     const w = checkForWarnings();
     if (w) return surfaceWarning(w);
@@ -281,16 +316,37 @@
     const prog = startProgress(btn);
     try {
       const post = readPost(postEl);
-      if (!post.text || post.text.length < 10) { prog.restore(); showBanner('Could not read this post’s text, skipping.', true); return; }
+
+      // Understand the post's media (image / carousel / video cover frame).
+      let media = { type: 'text', images: [] };
+      try { if (adapter.media) media = adapter.media(postEl); } catch { /* ignore */ }
+      if (media.type === 'carousel') {
+        try { media.images = await collectCarousel(postEl, media.images); } catch { /* ignore */ }
+      }
+
+      const hasText = post.text && post.text.length >= 10;
+      if (!hasText && (!media.images || !media.images.length)) {
+        prog.restore();
+        showBanner('Could not read this post, skipping.', true);
+        return;
+      }
 
       const resp = await chrome.runtime.sendMessage({
         type: 'DRAFT',
-        payload: { postText: post.text, postAuthor: post.author, postUrl: post.url, surface: adapter.detectSurface(), platform: adapter.platform },
+        payload: {
+          postText: post.text,
+          postAuthor: post.author,
+          postUrl: post.url,
+          surface: adapter.detectSurface(),
+          platform: adapter.platform,
+          postType: media.type,
+          images: media.images,
+        },
       });
       if (!resp || !resp.ok) { prog.restore(); showBanner(resp?.error || 'Drafting failed.', true); return; }
 
       prog.finish();
-      setTimeout(() => { renderPanel(postEl, post, { comment: resp.data.comment, logId: resp.data.logId }); prog.restore(); }, 280);
+      setTimeout(() => { renderPanel(postEl, post, { comment: resp.data.comment, logId: resp.data.logId, media }); prog.restore(); }, 280);
     } catch (e) {
       log('handleDraft error', e);
       prog.restore();
@@ -313,21 +369,58 @@
   function injectInto(postEl) {
     try {
       if (postEl.querySelector('.' + BTN_CLASS)) return;
-      const host = pick(postEl, SEL.actionBar) || postEl;
       const btn = makeButton();
       btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handleDraft(postEl, btn); });
-      host.appendChild(btn);
+
+      // Prefer the social action bar; fall back to next to the comment button;
+      // last resort, pin it to the top of the post so it is always visible.
+      const bar = pick(postEl, SEL.actionBar);
+      if (bar) { bar.appendChild(btn); return; }
+      const cb = pick(postEl, SEL.commentButton);
+      if (cb && cb.parentElement) { cb.parentElement.insertBefore(btn, cb.nextSibling); return; }
+      postEl.insertBefore(btn, postEl.firstChild);
     } catch (e) { log('injectInto skipped', e); }
+  }
+
+  // Find the post container that owns a given element (e.g. a comment button).
+  function findPostContainer(el) {
+    for (const sel of SEL.post) {
+      try { const c = el.closest(sel); if (c) return c; } catch { /* bad selector */ }
+    }
+    try { const a = el.closest('article, div[role="article"], [data-urn], [data-id]'); if (a) return a; } catch { /* ignore */ }
+    // last resort: climb a few levels to a reasonably sized block
+    let n = el;
+    for (let i = 0; i < 6 && n.parentElement; i++) n = n.parentElement;
+    return n;
   }
 
   function scanPosts() {
     if (!enabled) return;
     const w = checkForWarnings();
     if (w) return surfaceWarning(w);
+
+    // Primary: match post containers by class/urn.
     for (const sel of SEL.post) {
       let nodes = [];
       try { nodes = document.querySelectorAll(sel); } catch { continue; }
       if (nodes.length) { nodes.forEach(injectInto); break; }
+    }
+
+    // Robust fallback: anchor on each Comment button (its aria-label is stable
+    // even when post classes change) and add our button beside it.
+    let anchors = [];
+    for (const sel of SEL.commentButton) {
+      try { const n = document.querySelectorAll(sel); if (n.length) { anchors = Array.from(n); break; } } catch { /* ignore */ }
+    }
+    for (const a of anchors) {
+      const postEl = findPostContainer(a);
+      if (!postEl || postEl.querySelector('.' + BTN_CLASS)) continue;
+      try {
+        const btn = makeButton();
+        btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handleDraft(postEl, btn); });
+        const clickable = a.closest('button, [role="button"], a') || a;
+        (clickable.parentElement || postEl).insertBefore(btn, clickable.nextSibling);
+      } catch (e) { log('anchor inject skipped', e); }
     }
   }
 

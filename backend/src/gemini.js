@@ -3,13 +3,46 @@
 
 import { buildSystemPrompt, buildUserPrompt, sanitize } from './prompt.js';
 
-export async function draftComment({ settings, category, postText, postAuthor, platform, avoid = [] }) {
+// Fetch an image URL and return a Gemini inlineData part, or null on any
+// problem (so drafting falls back to text/caption-only, never breaks).
+async function fetchImagePart(imgUrl) {
+  const MAX_BYTES = Number(process.env.VISION_MAX_IMAGE_BYTES || 5_000_000);
+  try {
+    const res = await fetch(imgUrl, {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        accept: 'image/avif,image/webp,image/png,image/jpeg,*/*',
+      },
+      signal: AbortSignal.timeout(Number(process.env.VISION_FETCH_TIMEOUT_MS || 8000)),
+    });
+    if (!res.ok) return null;
+    const type = (res.headers.get('content-type') || '').split(';')[0].trim();
+    if (!/^image\/(jpeg|png|webp|gif|heic|heif)$/i.test(type)) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length || buf.length > MAX_BYTES) return null;
+    return { inlineData: { mimeType: type.toLowerCase(), data: buf.toString('base64') } };
+  } catch {
+    return null;
+  }
+}
+
+async function buildImageParts(images) {
+  if (!Array.isArray(images) || !images.length) return [];
+  const limit = Number(process.env.VISION_MAX_IMAGES || 4);
+  const urls = [...new Set(images.filter((u) => typeof u === 'string' && /^https?:\/\//.test(u)))].slice(0, limit);
+  const parts = await Promise.all(urls.map(fetchImagePart));
+  return parts.filter(Boolean);
+}
+
+export async function draftComment({ settings, category, postText, postAuthor, platform, postType, images = [], avoid = [] }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw Object.assign(new Error('GEMINI_API_KEY is not set on the server'), { status: 500 });
 
   const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
   const maxTokens = Number(process.env.GEMINI_MAX_TOKENS || 800);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+
+  const imageParts = await buildImageParts(images);
 
   const generationConfig = {
     maxOutputTokens: maxTokens,
@@ -23,9 +56,13 @@ export async function draftComment({ settings, category, postText, postAuthor, p
     generationConfig.thinkingConfig = { thinkingBudget: 0 };
   }
 
+  const userParts = [
+    { text: buildUserPrompt({ category, postText, postAuthor, platform, postType, hasImages: imageParts.length > 0 }) },
+    ...imageParts,
+  ];
   const body = {
     systemInstruction: { parts: [{ text: buildSystemPrompt(settings, avoid) }] },
-    contents: [{ role: 'user', parts: [{ text: buildUserPrompt({ category, postText, postAuthor, platform }) }] }],
+    contents: [{ role: 'user', parts: userParts }],
     generationConfig,
   };
 

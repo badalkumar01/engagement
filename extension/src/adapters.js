@@ -13,6 +13,44 @@
 (() => {
   'use strict';
 
+  // --- Shared media extraction -------------------------------------------
+  function pickImgSrc(im) {
+    try {
+      if (im.srcset) {
+        const parts = im.srcset.split(',').map((s) => s.trim().split(/\s+/));
+        const last = parts[parts.length - 1];
+        if (last && last[0]) return last[0];
+      }
+    } catch { /* ignore */ }
+    return im.currentSrc || im.src || '';
+  }
+  // Returns { type: 'text'|'static'|'carousel'|'video', images: [url] }.
+  function extractMedia(postEl, { hostRe, excludeSel }) {
+    const out = { type: 'text', images: [] };
+    try {
+      const video = postEl.querySelector('video');
+      const imgs = Array.from(postEl.querySelectorAll('img')).filter((im) => {
+        if (excludeSel && im.closest(excludeSel)) return false; // skip avatars/header
+        const big = (im.naturalWidth || im.width || 0) >= 200;
+        const host = hostRe ? hostRe.test(im.currentSrc || im.src || '') : false;
+        return big || host;
+      });
+      let urls = imgs.map(pickImgSrc).filter((u) => /^https?:\/\//.test(u));
+      const isCarousel = !!postEl.querySelector('button[aria-label="Next"], [aria-label="Next"][role="button"]') || urls.length > 1;
+      if (video) {
+        out.type = 'video';
+        const poster = video.getAttribute('poster');
+        if (poster && /^https?:\/\//.test(poster)) urls.unshift(poster);
+      } else if (isCarousel) {
+        out.type = 'carousel';
+      } else if (urls.length) {
+        out.type = 'static';
+      }
+      out.images = [...new Set(urls)].slice(0, 6);
+    } catch { /* ignore */ }
+    return out;
+  }
+
   const linkedin = {
     platform: 'linkedin',
     label: 'LinkedIn',
@@ -21,11 +59,15 @@
     sel: {
       post: [
         'div.feed-shared-update-v2',
-        'div.update-components-actor + div',
+        'div.fie-impression-container',
+        'div[data-urn^="urn:li:activity"]',
         '[data-urn^="urn:li:activity"]',
+        'div.update-components-actor + div',
+        'main [data-id^="urn:li:activity"]',
       ],
       author: [
         '.update-components-actor__title span[aria-hidden="true"]',
+        '.update-components-actor__title',
         '.update-components-actor__name',
         '.feed-shared-actor__name',
         'span.actor-name',
@@ -34,9 +76,12 @@
         '.update-components-text',
         '.feed-shared-update-v2__description',
         '.feed-shared-text',
+        '.break-words',
       ],
       commentButton: [
         'button[aria-label*="Comment" i]',
+        'button[aria-label*="comment" i]',
+        '[role="button"][aria-label*="comment" i]',
         'button.comment-button',
       ],
       editor: [
@@ -46,8 +91,9 @@
       ],
       actionBar: [
         '.feed-shared-social-action-bar',
-        '.social-actions-buttons',
         '.feed-shared-social-actions',
+        '.social-actions-buttons',
+        '.update-v2-social-activity',
       ],
     },
     detectSurface() {
@@ -60,6 +106,9 @@
       const urn = postEl.getAttribute('data-urn');
       if (urn) return `https://www.linkedin.com/feed/update/${encodeURIComponent(urn)}/`;
       return location.href;
+    },
+    media(postEl) {
+      return extractMedia(postEl, { hostRe: /licdn\.com|media\./, excludeSel: '.update-components-actor, header' });
     },
     checkpointPath: /\/checkpoint\//i,
     warningPhrases: [
@@ -97,6 +146,9 @@
         if (a?.href) return a.href;
       } catch { /* ignore */ }
       return location.href;
+    },
+    media(postEl) {
+      return extractMedia(postEl, { hostRe: /scontent|cdninstagram/, excludeSel: 'header' });
     },
     checkpointPath: /\/(challenge|accounts\/suspended)\//i,
     warningPhrases: [

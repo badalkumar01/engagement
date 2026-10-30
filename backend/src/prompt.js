@@ -61,17 +61,36 @@ const PLATFORM_STYLE = {
   instagram: 'This is for Instagram: casual and concise. Keep it to one short line or two. A fitting emoji is fine but optional, never more than one.',
 };
 
-export function buildUserPrompt({ category, postText, postAuthor, platform }) {
+const TYPE_NOTE = {
+  carousel: 'This is a multi-image carousel post. The attached images are its slides, in order.',
+  video: 'This is a video post. The attached image is the video\'s cover frame, so treat it as a still from the video, not the whole thing.',
+  static: 'This is a single-image post. The attached image is that image.',
+};
+
+export function buildUserPrompt({ category, postText, postAuthor, platform, postType, hasImages }) {
   const catSpec = CATEGORIES[category] || CATEGORIES.question;
   const platformLine = PLATFORM_STYLE[platform] || PLATFORM_STYLE.linkedin;
+
+  const visual = [];
+  if (hasImages) {
+    visual.push(TYPE_NOTE[postType] || 'One or more images from the post are attached.');
+    visual.push('Look closely at the image(s), INCLUDING any text shown in them, and make the comment specific to what is actually shown. Do not describe the image back; react to it like a person would.');
+  }
+  // When we know little (thin caption, no usable images), steer away from guessing.
+  const thinText = (postText || '').trim().length < 15;
+  if (thinText && !hasImages) {
+    visual.push('There is very little to go on here. Do NOT invent specifics. Write a short, warm, genuine open-ended question or reaction that fits the author and context without claiming details you cannot see.');
+  }
+
   return `Write one ${category} comment.
 
 ${platformLine}
+${visual.join('\n')}
 
 Category intent: ${catSpec}
 
 Post author: ${postAuthor || 'unknown'}
-Post content:
+Post caption:
 """
 ${(postText || '').slice(0, 4000)}
 """`;

@@ -311,6 +311,38 @@
     return [...urls].slice(0, 8);
   }
 
+  // Grab one frame of a video as a JPEG data URL (null if cross-origin tainted).
+  function grabFrame(video) {
+    try {
+      if (!video || !video.videoWidth) return null;
+      const scale = Math.min(1, 640 / video.videoWidth);
+      const c = document.createElement('canvas');
+      c.width = Math.round(video.videoWidth * scale);
+      c.height = Math.round(video.videoHeight * scale);
+      c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+      const u = c.toDataURL('image/jpeg', 0.55);
+      return u && u.length > 100 ? u : null;
+    } catch { return null; }
+  }
+
+  // Capture several frames across the video so the model understands the whole
+  // thing (the activity and its progression), not just one still.
+  async function captureVideoFrames(postEl, n = 4, gapMs = 600) {
+    const video = postEl.querySelector('video') || document.querySelector('video');
+    if (!video) return [];
+    const frames = [];
+    const seen = new Set();
+    for (let i = 0; i < n; i++) {
+      const f = grabFrame(video);
+      if (f) {
+        const key = f.length + ':' + f.slice(0, 80); // skip near-identical frames (paused video)
+        if (!seen.has(key)) { seen.add(key); frames.push(f); }
+      }
+      if (i < n - 1) await new Promise((r) => setTimeout(r, gapMs));
+    }
+    return frames;
+  }
+
   async function handleDraft(postEl, btn) {
     const w = checkForWarnings();
     if (w) return surfaceWarning(w);
@@ -319,11 +351,16 @@
     try {
       const post = readPost(postEl);
 
-      // Understand the post's media (image / carousel / video cover frame).
+      // Understand the post's media (image / carousel / video frames).
       let media = { type: 'text', images: [] };
       try { if (adapter.media) media = adapter.media(postEl); } catch { /* ignore */ }
       if (media.type === 'carousel') {
         try { media.images = await collectCarousel(postEl, media.images); } catch { /* ignore */ }
+      } else if (media.type === 'video') {
+        try {
+          const frames = await captureVideoFrames(postEl, 4, 600);
+          if (frames.length) media.images = [...frames, ...media.images].slice(0, 5);
+        } catch { /* ignore */ }
       }
 
       const hasText = post.text && post.text.length >= 10;

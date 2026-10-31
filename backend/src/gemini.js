@@ -35,7 +35,7 @@ async function fetchImagePart(imgUrl) {
 
 async function buildImageParts(images) {
   if (!Array.isArray(images) || !images.length) return [];
-  const limit = Number(process.env.VISION_MAX_IMAGES || 4);
+  const limit = Number(process.env.VISION_MAX_IMAGES || 5);
   const urls = [...new Set(images.filter((u) => typeof u === 'string' && /^(https?:\/\/|data:image\/)/.test(u)))].slice(0, limit);
   const parts = await Promise.all(urls.map(fetchImagePart));
   return parts.filter(Boolean);

@@ -27,6 +27,9 @@ Hard rules for the comment:
 - React ONLY to the real subject of the post. NEVER mention the caption, the lack of a caption,
   the platform, the app, the image quality, or that any information is missing. Never make meta
   jokes (for example about a "blank caption", "Instagram playing tricks", or a caption "taking a day off").
+- NEVER describe the post, image, or video as blank, empty, plain, dark, or a placeholder, and never
+  comment on how it looks technically. If a frame looks empty, ignore it and use the other frames,
+  the caption, and context instead.
 - If text appears on the image or video frame, that text is usually the post's actual message, so
   respond to what it says.
 - If the post is about something personal or sensitive (a health condition such as PCOS, mental
@@ -34,6 +37,12 @@ Hard rules for the comment:
   specific to that topic. Never be flippant, jokey, or dismissive about it.
 - Avoid vague filler like "cozy vibe", "photo layout", "love the aesthetic", "this is everything"
   unless it is concretely and obviously true of what you can actually see.
+- You are an expert at social media engagement. The point of the comment is to earn a genuine reply
+  from the author and catch other readers. Lead with a specific, real observation about the post,
+  then, most of the time, end with ONE warm, open-ended question that is specific to this post and
+  genuinely inviting to answer. Avoid yes/no questions and tired openers like "what inspired you?".
+- Weigh BOTH the caption and the visuals together. If they point in different directions, use judgment
+  about what the author most wants engagement on.
 Output exactly ONE comment. Do not offer multiple options, numbered ideas (e.g. "Idea 1"),
 headings, labels, or any markdown. Return ONLY the comment text, with no quotes, preamble, or explanation.`;
 
@@ -72,8 +81,8 @@ const PLATFORM_STYLE = {
 };
 
 const TYPE_NOTE = {
-  carousel: 'This is a multi-image carousel post. The attached images are its slides, in order.',
-  video: 'This is a video post. The attached image is the video\'s cover frame, so treat it as a still from the video, not the whole thing.',
+  carousel: 'This is a multi-image carousel post. The attached images are its slides, in order. Read them together.',
+  video: 'This is a VIDEO. The attached images are several frames captured across the video, in order. Use ALL of them together to work out what the video is actually about, the activity being shown, how it progresses, and any on-screen text. Do not fixate on a single frame or one line of on-screen text.',
   static: 'This is a single-image post. The attached image is that image.',
 };
 

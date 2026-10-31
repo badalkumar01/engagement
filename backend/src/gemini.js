@@ -7,6 +7,13 @@ import { buildSystemPrompt, buildUserPrompt, sanitize } from './prompt.js';
 // problem (so drafting falls back to text/caption-only, never breaks).
 async function fetchImagePart(imgUrl) {
   const MAX_BYTES = Number(process.env.VISION_MAX_IMAGE_BYTES || 5_000_000);
+  // Captured video frames / canvas images arrive as data: URLs (base64).
+  if (imgUrl.startsWith('data:')) {
+    const m = imgUrl.match(/^data:(image\/[a-z]+);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!m) return null;
+    if (Buffer.byteLength(m[2], 'base64') > MAX_BYTES) return null;
+    return { inlineData: { mimeType: m[1].toLowerCase(), data: m[2] } };
+  }
   try {
     const res = await fetch(imgUrl, {
       headers: {
@@ -29,7 +36,7 @@ async function fetchImagePart(imgUrl) {
 async function buildImageParts(images) {
   if (!Array.isArray(images) || !images.length) return [];
   const limit = Number(process.env.VISION_MAX_IMAGES || 4);
-  const urls = [...new Set(images.filter((u) => typeof u === 'string' && /^https?:\/\//.test(u)))].slice(0, limit);
+  const urls = [...new Set(images.filter((u) => typeof u === 'string' && /^(https?:\/\/|data:image\/)/.test(u)))].slice(0, limit);
   const parts = await Promise.all(urls.map(fetchImagePart));
   return parts.filter(Boolean);
 }

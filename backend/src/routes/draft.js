@@ -57,6 +57,11 @@ router.post('/draft-comment', requireAuth, async (req, res, next) => {
         images,
         avoid: prior,
       });
+      // The model returns the SKIP sentinel when it genuinely cannot tell what
+      // the post is about. Surface that instead of posting generic filler.
+      if (/^skip[.!]?$/i.test(candidate.trim())) {
+        return res.status(422).json({ error: 'Could not understand this post well enough to write a good comment. Try a different post, or open it fully first.' });
+      }
       dupe = findNearDuplicate(candidate, prior, 0.7);
       if (!dupe) {
         comment = candidate;

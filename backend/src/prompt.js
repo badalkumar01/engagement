@@ -24,6 +24,16 @@ Hard rules for the comment:
 - No hashtags.
 - Do not pitch, sell, or paste any links. The commenter's own links are context only.
 - Sound like a real person leaving a quick, thoughtful comment, not like marketing copy.
+- React ONLY to the real subject of the post. NEVER mention the caption, the lack of a caption,
+  the platform, the app, the image quality, or that any information is missing. Never make meta
+  jokes (for example about a "blank caption", "Instagram playing tricks", or a caption "taking a day off").
+- If text appears on the image or video frame, that text is usually the post's actual message, so
+  respond to what it says.
+- If the post is about something personal or sensitive (a health condition such as PCOS, mental
+  health, anxiety, grief, body image, a hard experience), be genuinely warm and empathetic and
+  specific to that topic. Never be flippant, jokey, or dismissive about it.
+- Avoid vague filler like "cozy vibe", "photo layout", "love the aesthetic", "this is everything"
+  unless it is concretely and obviously true of what you can actually see.
 Output exactly ONE comment. Do not offer multiple options, numbered ideas (e.g. "Idea 1"),
 headings, labels, or any markdown. Return ONLY the comment text, with no quotes, preamble, or explanation.`;
 
@@ -74,12 +84,12 @@ export function buildUserPrompt({ category, postText, postAuthor, platform, post
   const visual = [];
   if (hasImages) {
     visual.push(TYPE_NOTE[postType] || 'One or more images from the post are attached.');
-    visual.push('Look closely at the image(s), INCLUDING any text shown in them, and make the comment specific to what is actually shown. Do not describe the image back; react to it like a person would.');
+    visual.push('Look closely at the image(s), INCLUDING any text written on them, and make the comment specific to what is actually shown and what that text says. Do not describe the image back; react to it like a thoughtful person would.');
   }
-  // When we know little (thin caption, no usable images), steer away from guessing.
+  // Very little to go on: keep it safe and sincere, never improvise about missing info.
   const thinText = (postText || '').trim().length < 15;
   if (thinText && !hasImages) {
-    visual.push('There is very little to go on here. Do NOT invent specifics. Write a short, warm, genuine open-ended question or reaction that fits the author and context without claiming details you cannot see.');
+    visual.push('You have very little to work with. Do NOT invent specifics and do NOT comment on the caption or the app in any way. Write one short, sincere, warm line that fits the author\'s apparent topic. If you genuinely cannot tell the topic at all, respond with a single word of the sentinel: SKIP');
   }
 
   return `Write one ${category} comment.
@@ -89,7 +99,7 @@ ${visual.join('\n')}
 
 Category intent: ${catSpec}
 
-Post author: ${postAuthor || 'unknown'}
+Post author / handle: ${postAuthor || 'unknown'}
 Post caption:
 """
 ${(postText || '').slice(0, 4000)}

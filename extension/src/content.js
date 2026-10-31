@@ -84,12 +84,13 @@
   // user-text block (LinkedIn/Instagram wrap it in dir="ltr"/"auto"), which is
   // robust to class-name changes.
   function bestTextBlock(postEl) {
+    const scope = postEl.closest('article') || postEl; // include caption even if it sits outside postEl
     let best = '';
     let nodes = [];
-    try { nodes = postEl.querySelectorAll('span[dir="ltr"], span[dir="auto"], div[dir="ltr"], div[dir="auto"], p'); } catch { /* ignore */ }
+    try { nodes = scope.querySelectorAll('span[dir="ltr"], span[dir="auto"], div[dir="ltr"], div[dir="auto"], p'); } catch { /* ignore */ }
     nodes.forEach((el) => {
-      // skip nodes that merely contain other candidate blocks (avoid duplication)
-      if (el.querySelector('span[dir], p')) return;
+      if (el.closest('.' + PANEL_CLASS + ', .' + BTN_CLASS)) return; // never read our own UI
+      if (el.querySelector('span[dir], p')) return; // skip nodes that merely wrap other candidates
       const t = textOf(el);
       if (t.length > best.length) best = t;
     });
@@ -99,7 +100,8 @@
   function readPost(postEl) {
     const author = textOf(pick(postEl, SEL.author)) || 'unknown';
     let text = textOf(pick(postEl, SEL.text));
-    if (!text || text.length < 10) text = bestTextBlock(postEl);
+    const alt = bestTextBlock(postEl); // longest real text block is almost always the caption
+    if (alt.length > text.length) text = alt;
     let url = location.href;
     try { url = adapter.postUrl(postEl) || url; } catch { /* ignore */ }
     return { author, text: text || '', url };

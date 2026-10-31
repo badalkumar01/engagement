@@ -24,6 +24,22 @@
     } catch { /* ignore */ }
     return im.currentSrc || im.src || '';
   }
+  // Grab the current video frame as a JPEG data URL. Works when the video is a
+  // blob/same-origin source (common on IG/LinkedIn); returns null if the canvas
+  // is cross-origin tainted. This is how we read on-screen text in Reels/videos.
+  function captureVideoFrame(video) {
+    try {
+      if (!video || !video.videoWidth) return null;
+      const scale = Math.min(1, 720 / video.videoWidth);
+      const c = document.createElement('canvas');
+      c.width = Math.round(video.videoWidth * scale);
+      c.height = Math.round(video.videoHeight * scale);
+      c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+      const url = c.toDataURL('image/jpeg', 0.7); // throws if tainted
+      return url && url.length > 100 ? url : null;
+    } catch { return null; }
+  }
+
   // Returns { type: 'text'|'static'|'carousel'|'video', images: [url] }.
   function extractMedia(postEl, { hostRe, excludeSel }) {
     const out = { type: 'text', images: [] };
@@ -39,8 +55,10 @@
       const isCarousel = !!postEl.querySelector('button[aria-label="Next"], [aria-label="Next"][role="button"]') || urls.length > 1;
       if (video) {
         out.type = 'video';
+        const frame = captureVideoFrame(video); // reads on-screen text when possible
+        if (frame) urls.unshift(frame);
         const poster = video.getAttribute('poster');
-        if (poster && /^https?:\/\//.test(poster)) urls.unshift(poster);
+        if (poster && /^https?:\/\//.test(poster)) urls.push(poster);
       } else if (isCarousel) {
         out.type = 'carousel';
       } else if (urls.length) {

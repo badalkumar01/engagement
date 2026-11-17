@@ -20,7 +20,7 @@ services:
       - key: GEMINI_MAX_TOKENS
         value: "400"
       - key: LLM_TIMEOUT_MS
-        value: "30000"
+        value: "60000"
       - key: GEMINI_API_KEY
         sync: false          # paste this in the Render dashboard (kept secret)
       - key: JWT_SECRET

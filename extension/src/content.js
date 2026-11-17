@@ -37,18 +37,37 @@
   const textOf = (el) => (el?.innerText || el?.textContent || '').trim();
 
   // --- Warnings ------------------------------------------------------------
+  function isVisible(el) {
+    try {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      if (r.width < 60 || r.height < 60) return false; // ignore hidden/tiny preloaded elements
+      const s = getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+    } catch { return false; }
+  }
+
   function checkForWarnings() {
     try {
+      // 1) A real checkpoint/challenge page (by URL) is the reliable signal.
       if (adapter.checkpointPath.test(location.pathname) || adapter.checkpointPath.test(location.href)) {
         return `${adapter.label} checkpoint detected. Stop and resolve it in your tab before continuing.`;
       }
-      const bodyText = (document.body?.innerText || '').toLowerCase();
+      // 2) Warning phrases only in the page title / headings, never the whole feed,
+      //    so a normal post or ad that happens to contain the words can't trip it.
+      const headings = Array.from(document.querySelectorAll('h1, h2')).map((h) => h.textContent || '').join(' ');
+      const headingText = ((document.title || '') + ' ' + headings).toLowerCase();
       for (const f of adapter.warningPhrases) {
-        if (bodyText.includes(f.toLowerCase())) {
+        if (headingText.includes(f.toLowerCase())) {
           return `${adapter.label} warning detected ("${f}"). Stop and resolve it before continuing.`;
         }
       }
-      if (document.querySelector('iframe[src*="captcha" i], [id*="captcha" i], [class*="captcha" i]')) {
+      // 3) A captcha only counts if it is a VISIBLE challenge from a known provider.
+      //    LinkedIn keeps hidden captcha elements in the DOM; those must NOT alarm.
+      const captcha = document.querySelector(
+        'iframe[src*="recaptcha" i], iframe[src*="hcaptcha" i], iframe[src*="arkoselabs" i], iframe[src*="funcaptcha" i], iframe[title*="captcha" i]'
+      );
+      if (captcha && isVisible(captcha)) {
         return 'A captcha is being shown. Stop and complete it manually.';
       }
     } catch { /* ignore */ }
@@ -358,7 +377,7 @@
         try { media.images = await collectCarousel(postEl, media.images); } catch { /* ignore */ }
       } else if (media.type === 'video') {
         try {
-          const frames = await captureVideoFrames(postEl, 4, 600);
+          const frames = await captureVideoFrames(postEl, 3, 500);
           if (frames.length) media.images = [...frames, ...media.images].slice(0, 5);
         } catch { /* ignore */ }
       }
